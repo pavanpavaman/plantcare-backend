@@ -6,15 +6,51 @@ import numpy as np
 import os
 import json
 import google.generativeai as genai
+import requests
+from tqdm import tqdm
 
 # === Flask App Setup ===
 app = Flask(__name__)
 CORS(app)
 
+# === Google Drive Model Link ===
+MODEL_FILE_ID = "10lbEfZFMQoOtVi2emipHsPzUACdPaifm"
+MODEL_LOCAL_PATH = os.path.join("model", "plant_disease_cnn_custom.h5")
+GDRIVE_DOWNLOAD_URL = f"https://drive.google.com/uc?export=download&id={MODEL_FILE_ID}"
+
+# Ensure model directory exists
+os.makedirs("model", exist_ok=True)
+
+# Download model if not exists
+def download_file_from_google_drive(url, destination):
+    if os.path.exists(destination):
+        print("[INFO] Model already exists locally ✅")
+        return
+
+    print("[INFO] Downloading model from Google Drive...")
+    session = requests.Session()
+    response = session.get(url, stream=True)
+
+    # Handle large file download with tqdm
+    total_size = int(response.headers.get('content-length', 0))
+    with open(destination, "wb") as f, tqdm(
+        desc="Downloading model",
+        total=total_size,
+        unit='B',
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as bar:
+        for chunk in response.iter_content(1024 * 1024):
+            if chunk:
+                f.write(chunk)
+                bar.update(len(chunk))
+    print("[INFO] Model downloaded ✅")
+
+download_file_from_google_drive(GDRIVE_DOWNLOAD_URL, MODEL_LOCAL_PATH)
+
 # === Load General Model ===
-GENERAL_MODEL_PATH = os.path.join("model", "plant_disease_cnn_custom.h5")
 print("[INFO] Loading general model...")
-general_model = load_model(GENERAL_MODEL_PATH)
+general_model = load_model(MODEL_LOCAL_PATH)
 print("[INFO] General model loaded ✅")
 
 # === Load Class Names ===
@@ -23,17 +59,11 @@ with open(os.path.join("data", "class_names.json"), "r") as f:
 print("[INFO] Class names loaded ✅")
 
 # === Gemini API Setup ===
-genai.configure(api_key="YOUR_GEMINI_API_KEY")
+genai.configure(api_key="YOUR_GEMINI_API_KEY_HERE")
 llm = genai.GenerativeModel("gemini-1.5-flash")
 
 def get_description_prompt(label):
     return f"Give a short scientific description of the plant disease '{label}' in 3–4 lines. Use clean Markdown formatting."
-
-def get_prevention_prompt(label):
-    return f"Suggest 3–5 bullet-point preventive measures for the plant disease '{label}'. Use clear Markdown formatting."
-
-def get_treatment_prompt(label):
-    return f"Suggest 3–5 bullet-point treatment methods for the plant disease '{label}'. Use clear Markdown formatting."
 
 def query_gemini(prompt):
     try:
@@ -57,7 +87,6 @@ def predict():
         file = request.files['file']
         img_pil = Image.open(file).convert("RGB")
 
-        # Preprocess for general model
         img = img_pil.resize((224, 224))
         input_tensor = np.expand_dims(np.array(img) / 255.0, axis=0)
         preds = general_model.predict(input_tensor)[0]
@@ -72,36 +101,12 @@ def predict():
             "disease": label,
             "confidence": round(confidence * 100, 2),
             "description": description,
-            "treatment": ""  # Can use /get-treatment route if needed
+            "treatment": ""
         })
 
     except Exception as e:
         print("Prediction Error:", e)
         return jsonify({"error": str(e)}), 500
-
-@app.route("/get-prevention", methods=["POST"])
-def get_prevention():
-    try:
-        data = request.get_json()
-        label = data.get("label")
-        if not label:
-            return jsonify({"error": "Missing disease label"}), 400
-        return jsonify({"prevention": query_gemini(get_prevention_prompt(label))})
-    except Exception as e:
-        print("LLM prevention error:", e)
-        return jsonify({"prevention": "⚠️ Error fetching prevention info."})
-
-@app.route("/get-treatment", methods=["POST"])
-def get_treatment():
-    try:
-        data = request.get_json()
-        label = data.get("label")
-        if not label:
-            return jsonify({"error": "Missing disease label"}), 400
-        return jsonify({"treatment": query_gemini(get_treatment_prompt(label))})
-    except Exception as e:
-        print("LLM treatment error:", e)
-        return jsonify({"treatment": "⚠️ Error fetching treatment."})
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
