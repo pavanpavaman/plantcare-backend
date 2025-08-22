@@ -4,7 +4,7 @@ setuptools>=67.6.1
 wheel>=0.40.0
 
 # TensorFlow & Keras
-tensorflow==2.15.0
+tensorflow==2.20.0
 
 # Flask & Web
 Flask==2.3.2
@@ -25,4 +25,3 @@ gdown==4.7.1
 
 # Progress bar for downloads
 tqdm==4.67.1
-
