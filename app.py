@@ -6,47 +6,26 @@ import numpy as np
 import os
 import json
 import google.generativeai as genai
-import requests
-from tqdm import tqdm
+import gdown
 
 # === Flask App Setup ===
 app = Flask(__name__)
 CORS(app)
 
-# === Google Drive Model Link ===
+# === Google Drive Model Info ===
 MODEL_FILE_ID = "10lbEfZFMQoOtVi2emipHsPzUACdPaifm"
 MODEL_LOCAL_PATH = os.path.join("model", "plant_disease_cnn_custom.h5")
-GDRIVE_DOWNLOAD_URL = f"https://drive.google.com/uc?export=download&id={MODEL_FILE_ID}"
+GDRIVE_DOWNLOAD_URL = f"https://drive.google.com/uc?id={MODEL_FILE_ID}"
 
 # Ensure model directory exists
 os.makedirs("model", exist_ok=True)
 
 # Download model if not exists
-def download_file_from_google_drive(url, destination):
-    if os.path.exists(destination):
-        print("[INFO] Model already exists locally ✅")
-        return
-
+if not os.path.exists(MODEL_LOCAL_PATH):
     print("[INFO] Downloading model from Google Drive...")
-    session = requests.Session()
-    response = session.get(url, stream=True)
-
-    # Handle large file download with tqdm
-    total_size = int(response.headers.get('content-length', 0))
-    with open(destination, "wb") as f, tqdm(
-        desc="Downloading model",
-        total=total_size,
-        unit='B',
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as bar:
-        for chunk in response.iter_content(1024 * 1024):
-            if chunk:
-                f.write(chunk)
-                bar.update(len(chunk))
-    print("[INFO] Model downloaded ✅")
-
-download_file_from_google_drive(GDRIVE_DOWNLOAD_URL, MODEL_LOCAL_PATH)
+    gdown.download(GDRIVE_DOWNLOAD_URL, MODEL_LOCAL_PATH, quiet=False)
+else:
+    print("[INFO] Model already exists locally ✅")
 
 # === Load General Model ===
 print("[INFO] Loading general model...")
@@ -87,14 +66,18 @@ def predict():
         file = request.files['file']
         img_pil = Image.open(file).convert("RGB")
 
+        # Preprocess image
         img = img_pil.resize((224, 224))
         input_tensor = np.expand_dims(np.array(img) / 255.0, axis=0)
+
+        # Predict
         preds = general_model.predict(input_tensor)[0]
         idx = int(np.argmax(preds))
         confidence = float(np.max(preds))
         label = general_class_names[str(idx)]
         print(f"[GENERAL] {label} ({confidence:.2f})")
 
+        # Get description from Gemini
         description = query_gemini(get_description_prompt(label))
 
         return jsonify({
