@@ -19,7 +19,9 @@ google-generativeai
 Pillow==11.2.1
 numpy==2.1.3
 opencv-python==4.11.0.86
-gunicorn==22.2.2
+gunicorn
+
+
 
 
 
