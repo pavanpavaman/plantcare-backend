@@ -7,27 +7,23 @@ import os
 import json
 import gdown
 
-# === Flask App Setup ===
-app = Flask(__name__)
-CORS(app)
+# === Google Drive Model Setup ===
+MODEL_FILE_ID = "10lbEfZFMQoOtVi2emipHsPzUACdPaifm"
+MODEL_LOCAL_PATH = os.path.join("model", "plant_disease_cnn_custom.h5")
+GDRIVE_URL = f"https://drive.google.com/uc?id={MODEL_FILE_ID}"
 
-# === Model Setup ===
-MODEL_DIR = "model"
-MODEL_LOCAL_PATH = os.path.join(MODEL_DIR, "plant_disease_cnn_custom.h5")
-GDRIVE_FILE_ID = "10lbEfZFMQoOtVi2emipHsPzUACdPaifm"
-GDRIVE_URL = f"https://drive.google.com/uc?id={GDRIVE_FILE_ID}"
-
-# Ensure model directory exists
-os.makedirs(MODEL_DIR, exist_ok=True)
+# Ensure the folder exists
+os.makedirs("model", exist_ok=True)
 
 # Download model if not exists
 if not os.path.exists(MODEL_LOCAL_PATH):
     print("[INFO] Downloading model from Google Drive...")
     gdown.download(GDRIVE_URL, MODEL_LOCAL_PATH, quiet=False)
+    print("[INFO] Model downloaded ✅")
 else:
     print("[INFO] Model already exists locally ✅")
 
-# === Load General Model ===
+# === Load the Model ===
 print("[INFO] Loading general model...")
 general_model = load_model(MODEL_LOCAL_PATH)
 print("[INFO] General model loaded ✅")
@@ -36,6 +32,10 @@ print("[INFO] General model loaded ✅")
 with open(os.path.join("data", "class_names.json"), "r") as f:
     general_class_names = json.load(f)
 print("[INFO] Class names loaded ✅")
+
+# === Flask App Setup ===
+app = Flask(__name__)
+CORS(app)
 
 # === Routes ===
 @app.route("/", methods=["GET"])
@@ -59,6 +59,7 @@ def predict():
         label = general_class_names[str(idx)]
         print(f"[GENERAL] {label} ({confidence:.2f})")
 
+        # For now, description and treatment are empty
         return jsonify({
             "disease": label,
             "confidence": round(confidence * 100, 2),
